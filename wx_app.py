@@ -8,6 +8,9 @@ from ig_dm_scraper.scraper import get_dm_from_zip
 from ig_dm_scraper.formatter import _get_message_text, _get_message_type, _get_reaction
 from sentence_transformers import SentenceTransformer
 from datetime import datetime, timedelta
+import spacy
+import spacy_fastlang
+
 
 class MainFrame(wx.Frame):
     def __init__(self, parent, title):
@@ -111,6 +114,10 @@ class ReformatThread(threading.Thread):
 
     def reformat(self, path, as_dataframe=False):
         try:
+            import spacy_fastlang
+
+            nlp = spacy.load("en_core_web_sm")
+            nlp.add_pipe("language_detector")
             model = SentenceTransformer("all-MiniLM-L6-v2")
             # get the date one month before now
             one_month_ago = datetime.now() - timedelta(days=30)
@@ -122,15 +129,19 @@ class ReformatThread(threading.Thread):
                 for message in thread['message']:
                     text = _get_message_text(message)
                     type = _get_message_type(message)
+                    if type == 'text':
+                        doc = nlp(text)
+                        language = doc._.language
+                        length = doc.__len__()
                     output.append(
                         {
                         'thread_id': thread_idx,
                         'sender': hashlib.md5(message['sender_name'].encode('raw_unicode_escape')).hexdigest()[:5] if message['sender_name'] != 'participant' else 'participant',
-                        'timestamp': datetime.fromtimestamp(message['timestamp_ms']/ 1000).strftime('%Y-%m-%d %H:%M:%S'),
+                        'timestamp': datetime.fromtimestamp(message['timestamp_ms']/ 1000),
                         'message_type': type,
+                        'language': language if type == 'text' else None,
                         # 'text': text if type == 'text' else None,
-                        'len': len(text) if type == 'text' else None,
-                        'words': len(text.split()) if type == 'text' else None,
+                        'len': length if type == 'text' else None,
                         'embedding': model.encode(text) if type == 'text' else None,
                         'reaction': _get_reaction(message)
                         }
