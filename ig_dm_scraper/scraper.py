@@ -4,18 +4,6 @@ import zipfile
 import os
 import json
 
-
-def _login_w_session_id(session_id):
-    """Log in to instagram and return instagrapi's Client"""
-    cl = Client()
-    cl.delay_range = [1, 3]
-
-    print('Logging in ...')
-    cl.login_by_sessionid(session_id)
-
-    return cl
-
-
 def _get_dict_from_message(message) -> dict:
     """ This function get instagrapi's DirectMessage object and
         convert to a dictionary with the same format as JSON file
@@ -68,107 +56,6 @@ def _get_dict_from_message(message) -> dict:
 
     return msg_dict
 
-
-def get_dm_from_api(oldest_date: str, session_id: str = None) -> list:
-    """Get direct message data back until oldest_date
-
-        Args:
-            oldest_date (str): date used as a cutoff to get data newer than this date
-            session_id (str): instagram session id. If not specified will use input prompt
-
-        Return:
-            A list containing messages from each thread (chat room)
-
-    """
-    from instagrapi import Client
-
-    session_id = session_id if session_id else input('Enter session_id: ')
-    cl = _login_w_session_id(session_id)
-    oldest_date = datetime.date.fromisoformat(oldest_date)
-    thread_idx = 0
-    thread_end_flag = False
-    threads = cl.direct_threads(10)
-    thread_list = []
-
-    while not thread_end_flag:
-
-        # Check if need more threads then update
-        if len(threads) < thread_idx + 1:
-            print('Getting more thread')
-            threads = cl.direct_threads(len(threads) + 10)
-
-        # Stop if can't get more thread
-        if len(threads) < thread_idx + 1:
-            print('Stopping. No more thread found.')
-            thread_end_flag = True
-        else: # Otherwise loop to get messages in thread
-            thread = threads[thread_idx]
-            print('Scraping thread', thread_idx)
-
-            message_idx = 0
-            message_end_flag = False
-            messages = thread.messages
-
-            # Move to next thread if first message is older than next oldest_date set
-            if messages[0].timestamp.date() < oldest_date:
-                print('Stopping. Thread too old limit')
-                message_end_flag = True
-                thread_end_flag = True
-            else:
-                message_list = []
-                while not message_end_flag:
-                    # check if need to get more messages
-                    if len(messages) < message_idx + 1:
-                        # Get 20 more messages
-                        messages = cl.direct_messages(thread_id=thread.id,
-                                                    amount=len(messages) + 30)
-                    
-                    # Stop if can't get more messages
-                    if len(messages) < message_idx + 1:
-                        message_end_flag = True
-                    else:
-                        message = messages[message_idx]
-                        
-                        # change thread if reach the oldest_date
-                        if message.timestamp.date() < oldest_date:
-                            message_end_flag = True
-                        else:
-                            # reformat to conform with IG's official dump
-                            message_dict = _get_dict_from_message(message)   
-                            message_list.append(message_dict)
-                            message_idx += 1
-                
-                print(len(message_list), 'messages collected')
-                thread_list.append({
-                    'message': message_list
-                })
-                thread_idx += 1
-    
-    print(len(thread_list), 'threads collected')
-
-    return thread_list
-
-
-def _find_zip_file():
-    """Find zip file(s) in the current working directory and validate.
-       Raise an error if found."""
-    print('Finding the target zip file ... ', end="")
-    z_list = []
-    for filename in os.listdir(os.getcwd()):
-        if filename.endswith('.zip'):
-            z_list.append(filename)
-
-    if len(z_list) == 0:
-        raise Exception('No zip file found. Please upload a zip file.')
-    elif len(z_list) > 1:
-        raise Exception('Too many zip files are found. Please upload only 1 zip file.')
-    elif not zipfile.is_zipfile(z_list[0]):
-        raise Exception(f'The zip file {z_list[0]} is broken/invalid or still uploading.')
-    else:
-        print('done')
-        return z_list[0]
-
-
 def _find_participant_name_from_zip(zipname):
     """Find participant name from the zip file. Return empty string if not found"""
     print('Finding participant name ... ', end="")
@@ -186,12 +73,12 @@ def _find_participant_name_from_zip(zipname):
                     raise Exception('Failed to extract name from personal_information.json')
 
         if not name_flag:
-            raise Exception('Participant name not found in the zipfile. Please make sure that the zip file is correct.')
+            raise Exception('Participant name not found in the zip file. Please make sure that the zip file is correct.')
         
         return name
 
 
-def get_dm_from_zip(filepath: str = None, oldest_date: str = None) -> list:
+def get_dm_from_zip(filepath: str, oldest_date: str = None) -> list:
     """Get direct message from zip file until oldest_date
 
         Args:
@@ -201,7 +88,8 @@ def get_dm_from_zip(filepath: str = None, oldest_date: str = None) -> list:
             A list containing messages from each thread (chat room)
 
     """
-    zipname = filepath if filepath else _find_zip_file()
+    print("get_dm_from_zip")
+    zipname = filepath
     participant_name = _find_participant_name_from_zip(zipname)
     oldest_date = datetime.date.fromisoformat(oldest_date if oldest_date else '2000-01-01')
     message_count = 0

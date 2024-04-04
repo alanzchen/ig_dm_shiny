@@ -9,3 +9,5 @@ __pycache__/
 
 # Build
 site/
+dist/
+build/

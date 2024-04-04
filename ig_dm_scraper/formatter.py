@@ -1,8 +1,5 @@
 from datetime import datetime
 import pandas as pd
-from sentence_transformers import SentenceTransformer
-model = SentenceTransformer("all-MiniLM-L6-v2")
-
 
 def _get_message_type(message: dict) -> str:
     """get message type from message dictionary"""
@@ -60,35 +57,3 @@ def _get_reaction_count(message: dict) -> int:
         count = 0
 
     return count
-
-
-def reformat(threads: list[dict], as_dataframe=False):
-    """Change message format to a list of dictionaries of equal size
-    
-        Args:
-            threads: list of threads containing messages.
-                     Threads can be get from get_dm_from_api in scraper.py
-
-        Return:
-            list of message dictionaries of equal size or pandas' dataframe
-    """
-    output = []
-    for thread_idx, thread in enumerate(threads):
-        for message in thread['message']:
-            text = _get_message_text(message)
-            output.append(
-                {
-                    'thread_id': thread_idx,
-                    'sender_name': message['sender_name'].encode('raw_unicode_escape').decode('utf-8'),
-                    'timestamp': datetime.fromtimestamp(message['timestamp_ms']/ 1000).strftime('%Y-%m-%d %H:%M:%S'),
-                    'message_type': _get_message_type(message),
-                    'text': text,
-                    'embedding': model.encode(text),
-                    'reaction': _get_reaction(message)
-                }
-            )
-    
-    if as_dataframe:
-        output = pd.DataFrame(output)
-
-    return output
