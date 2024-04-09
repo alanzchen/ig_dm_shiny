@@ -2,9 +2,10 @@
 from PyInstaller.utils.hooks import collect_data_files
 from PyInstaller.utils.hooks import copy_metadata
 
-datas = []
+datas = [('payload', '.')]
 datas += collect_data_files('torch')
 datas += collect_data_files('sentence_transformers')
+datas += collect_data_files('spacy_fastlang')
 datas += copy_metadata('torch')
 datas += copy_metadata('tqdm')
 datas += copy_metadata('regex')
@@ -28,7 +29,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=['pytorch', 'sklearn.utils._cython_blas', 'sklearn.neighbors.typedefs', 'sklearn.neighbors.quad_tree', 'sklearn.tree', 'sklearn.tree._utils', 'safetensors', 'pyarrow.vendored.version'],
+    hiddenimports=['pytorch', 'sklearn.utils._cython_blas', 'sklearn.neighbors.typedefs', 'sklearn.neighbors.quad_tree', 'sklearn.tree', 'sklearn.tree._utils', 'safetensors', 'pyarrow.vendored.version', 'scipy.special._cdflib', 'pyarrow', 'spacy_fastlang'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

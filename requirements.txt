@@ -1,3 +1,5 @@
 pandas
-nltk
-sentence-transformers
+wxPython
+sentence_transformers
+spacy
+spacy-fastlang

@@ -1,20 +1,30 @@
 # IG Data Anonymizer
 
-To build static HTML site:
+## Requirements
+
+First, make sure you will have all the dependencies to run:
 
 ```
-shinylive export ./ site
+pip install -r requirements.txt
+python wx_app.py
 ```
 
-To deploy on Netlify:
+Mostly you will need to install other packages that I have not included in the requirements.txt. Just make sure it runs.
+
+## Build
 
 ```
-netlify deploy -d site
+mkdir payload
 ```
 
-(Initilaization of Shiny and Netlify is required before building. Read their docs.)
+Download `en_core_web_sm` from https://github.com/explosion/spacy-models/releases. Extract the folder containing `config.cfg` to the payload folder.
+
+Then run:
+
+```
+./build.sh
+```
 
 ## Notes
 
 - `ig_dm_scraper` by @NaphatPi
-- Do not touch the `requirements.txt`. It is Shiny-specific and should not include unnecessary dependencies.

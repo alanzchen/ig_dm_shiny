@@ -10,6 +10,8 @@ from sentence_transformers import SentenceTransformer
 from datetime import datetime, timedelta
 import spacy
 import spacy_fastlang
+from pathlib import Path
+bundle_dir = Path(__file__).parent.absolute()
 
 
 class MainFrame(wx.Frame):
@@ -115,8 +117,7 @@ class ReformatThread(threading.Thread):
     def reformat(self, path, as_dataframe=False):
         try:
             import spacy_fastlang
-
-            nlp = spacy.load("en_core_web_sm")
+            nlp = spacy.load(bundle_dir / "en_core_web_sm")
             nlp.add_pipe("language_detector")
             model = SentenceTransformer("all-MiniLM-L6-v2")
             # get the date one month before now
