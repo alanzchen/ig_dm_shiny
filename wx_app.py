@@ -16,8 +16,10 @@ import shutil
 
 bundle_dir = Path(__file__).parent.absolute()
 
-
-nlp = spacy.load(bundle_dir / "en_core_web_sm")
+try:
+    nlp = spacy.load(bundle_dir / "en_core_web_sm")
+except:
+    nlp = spacy.load(bundle_dir / "payload" / "en_core_web_sm")
 nlp.add_pipe("language_detector")
 model = SentenceTransformer("all-MiniLM-L6-v2")
 print(nlp('hello')._.language)
@@ -152,9 +154,13 @@ class ReformatThread(threading.Thread):
             # get the date one month before now
             cutoff_date = datetime.now() - timedelta(days=90)
             threads = get_dm_from_zip(filepath=path, oldest_date=cutoff_date.strftime('%Y-%m-%d'))
+            print("Getting Post Comments")
             post_comments = get_post_comments(filepath=path)
+            print("Getting Reels Comments")
             reels_comments = get_reels_comments(filepath=path)
+            print("Getting Posts")
             posts = get_posts(filepath=path)
+            print("Getting Stories")
             stories = get_stories(filepath=path)
 
             output = []
@@ -319,15 +325,15 @@ class ReformatThread(threading.Thread):
                 wx.CallAfter(self.parent.update_progress_bar, progress)
 
             output = pd.DataFrame(output)
-            output.to_csv(bundle_dir / "data.csv", index=False)
+            output.to_csv(bundle_dir / "data.zip", index=False, compression='zip')
             # calculate hash of the file
             hash = hashlib.md5()
-            with open(bundle_dir / "data.csv", "rb") as f:
+            with open(bundle_dir / "data.zip", "rb") as f:
                 for chunk in iter(lambda: f.read(4096), b""):
                     hash.update(chunk)
             # rename the data.csv based on the hash
-            final_file_path = bundle_dir / f"{hash.hexdigest()}.csv"
-            Path(bundle_dir / "data.csv").rename(final_file_path)
+            final_file_path = bundle_dir / f"{hash.hexdigest()}.zip"
+            Path(bundle_dir / "data.zip").rename(final_file_path)
 
             if output is not None and not output.empty:
                 wx.CallAfter(self.parent.save_file_button.Enable)  # Enable the save button on the main thread

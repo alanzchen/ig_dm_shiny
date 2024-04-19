@@ -203,12 +203,14 @@ def get_posts(filepath: str) -> list:
                 if 'content' in root and 'posts' in filename and filename.endswith('.json'):
                     json_path = os.path.join(root, filename)
                     with open(json_path, 'r') as file:
+                        print(json_path)
                         posts = json.load(file)['media']
                         posts_list += posts
     elif zipfile.is_zipfile(filepath): # if filepath is a zip file
         with zipfile.ZipFile(filepath, mode='r') as z:
             for filename in z.namelist():
-                if 'content' in filename and 'stories' in filename and filename.endswith('.json'):
+                if 'content' in filename and 'posts' in filename and filename.endswith('.json'):
+                    print(filename)
                     decoded_text = z.read(filename)
                     posts = json.loads(decoded_text)['media']
                     posts_list += posts
