@@ -4,15 +4,32 @@ import wx
 import wx.lib.newevent
 import pandas as pd
 import threading
-from ig_dm_scraper.scraper import get_dm_from_zip
+from ig_dm_scraper.scraper import get_dm_from_zip, get_post_comments, get_posts, get_reels_comments, get_stories
 from ig_dm_scraper.formatter import _get_message_text, _get_message_type, _get_reaction
 from sentence_transformers import SentenceTransformer
 from datetime import datetime, timedelta
 import spacy
-import spacy_fastlang
 from pathlib import Path
+import spacy_fastlang
+import os
+import shutil
+
 bundle_dir = Path(__file__).parent.absolute()
 
+
+nlp = spacy.load(bundle_dir / "en_core_web_sm")
+nlp.add_pipe("language_detector")
+model = SentenceTransformer("all-MiniLM-L6-v2")
+print(nlp('hello')._.language)
+
+def fix_encoding(s):
+    if s:
+        return s.encode("utf-8").decode("utf-8")
+    else:
+        return s
+    
+def namehash(name):
+    return hashlib.md5(name.encode('raw_unicode_escape')).hexdigest()[:5]
 
 class MainFrame(wx.Frame):
     def __init__(self, parent, title):
@@ -24,6 +41,7 @@ class MainFrame(wx.Frame):
         self.layout_components()
         
         self.Bind(wx.EVT_BUTTON, self.on_open_file, self.open_file_button)
+        self.Bind(wx.EVT_BUTTON, self.on_open_folder, self.open_folder_button)
         self.Bind(wx.EVT_BUTTON, self.on_save_file, self.save_file_button)
 
         self.Centre()
@@ -31,10 +49,12 @@ class MainFrame(wx.Frame):
 
     def layout_components(self):
         # Group 1: File Chooser
-        file_chooser_heading = wx.StaticText(self.panel, label="1. Select Instagram Export File")
+        file_chooser_heading = wx.StaticText(self.panel, label="1. Select Instagram Export File or Folder")
         file_chooser_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.open_file_button = wx.Button(self.panel, label="Select File")
+        self.open_folder_button = wx.Button(self.panel, label="Select Folder")
         file_chooser_sizer.Add(self.open_file_button, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+        file_chooser_sizer.Add(self.open_folder_button, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
         file_chooser_divider = wx.StaticLine(self.panel, style=wx.LI_HORIZONTAL)
 
         # Group 2: Progress Bar
@@ -74,61 +94,78 @@ class MainFrame(wx.Frame):
             if file_dialog.ShowModal() == wx.ID_CANCEL:
                 return  # User changed their mind
             # Disable UI components during processing
+            self.open_folder_button.Disable()
             self.open_file_button.Disable()
             self.SetStatusText("Processing... Please wait.")
             # Async processing
-            ReformatThread(self, file_dialog.GetPath(), as_dataframe=True)
+            ReformatThread(self, file_dialog.GetPath())
+
+    def on_open_folder(self, event):
+        with wx.DirDialog(self, "Select your Instagram data folder",
+                           style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as file_dialog:
+            if file_dialog.ShowModal() == wx.ID_CANCEL:
+                return  # User changed their mind
+            # Disable UI components during processing
+            self.open_folder_button.Disable()
+            self.open_file_button.Disable()
+            self.SetStatusText("Processing... Please wait.")
+            # Async processing
+            ReformatThread(self, file_dialog.GetPath())
 
     def on_save_file(self, event):
-        with wx.FileDialog(self, "Save file", defaultFile="please_upload_me_to_webpage", wildcard="Parquet files (*.parquet)|*.parquet",
+        with wx.DirDialog(self, "Save file to this folder",
                            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as file_dialog:
             if file_dialog.ShowModal() == wx.ID_CANCEL:
                 return  # User changed their mind
             # Attempt to save the data
             try:
-                file_path = f"{file_dialog.GetPath()[:-4]}"
-                self.raw_df.to_parquet(file_path)
-                wx.MessageBox("Data saved successfully! Please upload it on our survey webpage. Feel free to quit this app now.", "Success", wx.OK | wx.ICON_INFORMATION)
+                target_folder_path = file_dialog.GetPath()
+                save_file_path = Path(target_folder_path) / f"{os.path.basename(self.final_file_path)}"
+                shutil.copy(self.final_file_path, save_file_path)
+                wx.MessageBox(f"Data saved to {save_file_path} successfully! Please do not rename the file. Now you may upload it on our survey webpage. Feel free to quit this app now.", "Success", wx.OK | wx.ICON_INFORMATION)
                 self.SetStatusText("Step 3 compeleted.")
             except Exception as e:
                 wx.MessageBox(f"Error saving the file: {e}", "Error", wx.OK | wx.ICON_ERROR)
                 self.SetStatusText(f"Error saving the file: {e}")
 
     def on_reformat_done(self, result):
-        self.raw_df = result  # Store the DataFrame in the instance
+        self.final_file_path = result  # Store the DataFrame in the instance
     
     def update_progress_bar(self, progress):
         self.progress_bar.SetValue(progress)
 
 
 class ReformatThread(threading.Thread):
-    def __init__(self, parent, path, as_dataframe=False):
+    def __init__(self, parent, path):
         threading.Thread.__init__(self)
         self.parent = parent
-        self.as_dataframe = as_dataframe
         self.path = path
         self.start()  # start the thread
 
     def run(self):
         # Execute the reformat function in the thread
-        output = self.reformat(self.path, self.as_dataframe)
+        output = self.reformat(self.path)
         wx.CallAfter(self.parent.on_reformat_done, output)
 
-    def reformat(self, path, as_dataframe=False):
+    def reformat(self, path):
         try:
-            import spacy_fastlang
-            nlp = spacy.load(bundle_dir / "en_core_web_sm")
-            nlp.add_pipe("language_detector")
-            model = SentenceTransformer("all-MiniLM-L6-v2")
             # get the date one month before now
-            one_month_ago = datetime.now() - timedelta(days=30)
-            threads = get_dm_from_zip(filepath=path, oldest_date=one_month_ago.strftime('%Y-%m-%d'))
+            cutoff_date = datetime.now() - timedelta(days=90)
+            threads = get_dm_from_zip(filepath=path, oldest_date=cutoff_date.strftime('%Y-%m-%d'))
+            post_comments = get_post_comments(filepath=path)
+            reels_comments = get_reels_comments(filepath=path)
+            posts = get_posts(filepath=path)
+            stories = get_stories(filepath=path)
+
             output = []
-            total_messages = sum(len(thread['message']) for thread in threads)
+            total_messages = sum(len(thread['message']) for thread in threads) + len(post_comments) + len(reels_comments) + len(posts) + len(stories)
             messages_processed = 0
+
+            # process DM
+            print("Processing DMs")
             for thread_idx, thread in enumerate(threads):
                 for message in thread['message']:
-                    text = _get_message_text(message)
+                    text = fix_encoding(_get_message_text(message))
                     type = _get_message_type(message)
                     if type == 'text':
                         doc = nlp(text)
@@ -136,10 +173,10 @@ class ReformatThread(threading.Thread):
                         length = doc.__len__()
                     output.append(
                         {
-                        'thread_id': thread_idx,
-                        'sender': hashlib.md5(message['sender_name'].encode('raw_unicode_escape')).hexdigest()[:5] if message['sender_name'] != 'participant' else 'participant',
+                        'receiver': thread_idx, # here is thread
+                        'sender': namehash(message['sender_name']) if message['sender_name'] != 'participant' else 'participant',
                         'timestamp': datetime.fromtimestamp(message['timestamp_ms']/ 1000),
-                        'message_type': type,
+                        'type': "message_" + type.replace(' ', '_'),
                         'language': language if type == 'text' else None,
                         # 'text': text if type == 'text' else None,
                         'len': length if type == 'text' else None,
@@ -151,22 +188,162 @@ class ReformatThread(threading.Thread):
                     progress = int((messages_processed / total_messages) * 100)
                     wx.CallAfter(self.parent.update_progress_bar, progress)
             
-            if as_dataframe:
-                output = pd.DataFrame(output)
+            # process post comments
+            print("Processing post comments")
+            for post in post_comments:
+                try:
+                    _ = post['string_map_data']
+                    text = fix_encoding(_['Comment']['value'])
+                    time = datetime.fromtimestamp(_['Time']['timestamp'])
+                    if time < cutoff_date:
+                        messages_processed += 1
+                        progress = int((messages_processed / total_messages) * 100)
+                        wx.CallAfter(self.parent.update_progress_bar, progress)
+                        continue
+                    if text:
+                        doc = nlp(text)
+                        language = doc._.language
+                        length = doc.__len__()
+                    output.append({
+                        'receiver': 'id_' + namehash(_['Media Owner']['value']),
+                        'sender': 'participant',
+                        'timestamp': time,
+                        'type': 'post_comments',
+                        'language': language if text else None,
+                        'len': length if text else None,
+                        'embedding': model.encode(text) if text else None,
+                    })
+                except Exception as e:
+                    print(_)
+                    print(e)
+                    pass
+                messages_processed += 1
+                progress = int((messages_processed / total_messages) * 100)
+                wx.CallAfter(self.parent.update_progress_bar, progress)
+
+            # process reels comments
+            print("Processing reels comments")
+            for reel in reels_comments:
+                try:
+                    _ = reel['string_map_data']
+                    text = fix_encoding(_['Comment']['value'])
+                    time = datetime.fromtimestamp(_['Time']['timestamp'])
+                    if time < cutoff_date:
+                        messages_processed += 1
+                        progress = int((messages_processed / total_messages) * 100)
+                        wx.CallAfter(self.parent.update_progress_bar, progress)
+                        continue
+                    if text:
+                        doc = nlp(text)
+                        language = doc._.language
+                        length = doc.__len__()
+                    output.append({
+                        'receiver': 'id_' + namehash(_['Media Owner']['value']),
+                        'sender': 'participant',
+                        'timestamp': time,
+                        'type': 'reel_comments',
+                        'language': language if text else None,
+                        'len': length if text else None,
+                        'embedding': model.encode(text) if text else None,
+                    })
+                except Exception as e:
+                    print(_)
+                    print(e)
+                    pass
+                messages_processed += 1
+                progress = int((messages_processed / total_messages) * 100)
+                wx.CallAfter(self.parent.update_progress_bar, progress)
+
+            # process posts
+            print("Processing posts")
+            for post in posts:
+                try:
+                    _ = post
+                    text = fix_encoding(_['title'])
+                    time = datetime.fromtimestamp(_['creation_timestamp'])
+                    if time < cutoff_date:
+                        messages_processed += 1
+                        progress = int((messages_processed / total_messages) * 100)
+                        wx.CallAfter(self.parent.update_progress_bar, progress)
+                        continue
+                    if text:
+                        doc = nlp(text)
+                        language = doc._.language
+                        length = doc.__len__()
+                    output.append({
+                        'sender': 'participant',
+                        'timestamp': time,
+                        'type': 'posts',
+                        'language': language if text else None,
+                        'len': length if text else None,
+                        'embedding': model.encode(text) if text else None,
+                    })
+                except Exception as e:
+                    print(_)
+                    print(e)
+                    pass
+                messages_processed += 1
+                progress = int((messages_processed / total_messages) * 100)
+                wx.CallAfter(self.parent.update_progress_bar, progress)
+
+            # process posts
+            print("Processing stories")
+            for post in stories:
+                try:
+                    _ = post
+                    text = fix_encoding(_['title'])
+                    time = datetime.fromtimestamp(_['creation_timestamp'])
+                    if time < cutoff_date:
+                        messages_processed += 1
+                        progress = int((messages_processed / total_messages) * 100)
+                        wx.CallAfter(self.parent.update_progress_bar, progress)
+                        continue
+                    if text:
+                        doc = nlp(text)
+                        language = doc._.language
+                        length = doc.__len__()
+                    output.append({
+                        'sender': 'participant',
+                        'timestamp': time,
+                        'type': 'story',
+                        'language': language if text else None,
+                        'len': length if text else None,
+                        'embedding': model.encode(text) if text else None,
+                    })
+                except Exception as e:
+                    print(_)
+                    print(e)
+                    pass
+                messages_processed += 1
+                progress = int((messages_processed / total_messages) * 100)
+                wx.CallAfter(self.parent.update_progress_bar, progress)
+
+            output = pd.DataFrame(output)
+            output.to_csv(bundle_dir / "data.csv", index=False)
+            # calculate hash of the file
+            hash = hashlib.md5()
+            with open(bundle_dir / "data.csv", "rb") as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    hash.update(chunk)
+            # rename the data.csv based on the hash
+            final_file_path = bundle_dir / f"{hash.hexdigest()}.csv"
+            Path(bundle_dir / "data.csv").rename(final_file_path)
 
             if output is not None and not output.empty:
                 wx.CallAfter(self.parent.save_file_button.Enable)  # Enable the save button on the main thread
                 wx.CallAfter(self.parent.SetStatusText, "Step 2 compeleted.")
             else:
-                wx.MessageBox("We could not process your file. The file is in correct format but an unknown error has occurred. A possible reason is that the export data does not contain any message data in the past month. Please contact the study administrator chen6029@umn.edu for next steps.", "Error", wx.OK | wx.ICON_ERROR)
+                wx.MessageBox("We could not process your file. The file is in correct format but an unknown error has occurred. A possible reason is that the export data does not contain any message data in the past month. Please contact the study administrator umncarlsonstudy@gmail.com for next steps.", "Error", wx.OK | wx.ICON_ERROR)
                 wx.CallAfter(self.parent.SetStatusText, "Failed to process the file or no data returned.")
                 self.parent.open_file_button.Enable()
-            return output
+                self.parent.open_folder_button.Enable()
+            return final_file_path
         
         except Exception as e:
             wx.CallAfter(self.parent.SetStatusText, f"Error processing the file: {e}")
             wx.MessageBox(f"Error processing the file: {e}", "Error", wx.OK | wx.ICON_ERROR)
             self.parent.open_file_button.Enable()
+            self.parent.open_folder_button.Enable()
             return None
 
 def main():
