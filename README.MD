@@ -25,6 +25,13 @@ Then run:
 ./build.sh
 ```
 
+## Building x86 binary on Apple Silicon Mac
+
+1. Install a `universal2` version of Python on python.org
+2. Launch Terminal.app in Roestta mode. Run `arch` to confirm you are using the right arch.
+3. Activate the new Python env and use the corresponding pip to install all dependencies. Use `which pip` to confirm you are using the right one.
+4. Build as usual. Confirm the arch in your final build. 
+
 ## Notes
 
 - `ig_dm_scraper` by @NaphatPi

@@ -12,3 +12,4 @@ site/
 dist/
 build/
 payload/
+en_core_web_sm/

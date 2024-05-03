@@ -21,9 +21,6 @@ datas += copy_metadata('tqdm', recursive=True)
 datas += copy_metadata('transformers', recursive=True)
 
 
-block_cipher = None
-
-
 a = Analysis(
     ['wx_app.py'],
     pathex=[],
@@ -34,12 +31,10 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
+    optimize=0,
 )
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
@@ -61,7 +56,6 @@ exe = EXE(
 coll = COLLECT(
     exe,
     a.binaries,
-    a.zipfiles,
     a.datas,
     strip=False,
     upx=True,

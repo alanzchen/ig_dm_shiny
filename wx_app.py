@@ -13,6 +13,8 @@ from pathlib import Path
 import spacy_fastlang
 import os
 import shutil
+from multiprocessing import freeze_support
+freeze_support()
 
 bundle_dir = Path(__file__).parent.absolute()
 
