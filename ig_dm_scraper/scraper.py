@@ -65,38 +65,43 @@ def _find_participant_name_from_zip(zipname):
     # Check if zipname is a folder
     if os.path.isdir(zipname):
         folder_path = Path(zipname)
-        for root, dirs, files in os.walk(folder_path):
+        for root, dirs, files in os.walk(folder_path, topdown=False):
             for filename in files:
                 if 'personal_information' in root and filename.endswith('personal_information.json'):
                     json_path = os.path.join(root, filename)
                     with open(json_path, 'r') as file:
                         data = json.load(file)
-                        print(data)
-                        try:
-                            name = data['profile_user'][0]['string_map_data']['Name']['value']
-                            print('done')
-                            print('Participant name:', name)
-                            name_flag = True
-                            return name
-                        except Exception as e:
-                            raise Exception(f'Failed to extract name from personal_information.json: {e}')
+                        if data['profile_user'][0]['string_map_data']:
+                            try:
+                                name = data['profile_user'][0]['string_map_data']['Name']['value']
+                                print('done')
+                                print('Participant name:', name)
+                                return name
+                            except Exception as e:
+                                # it's ok to not get the name, just make sure the format is valid
+                                return ''
+                                pass
+                            # raise Exception(f'Failed to extract name from personal_information.json: {e}')
+        else:
+            raise Exception('personal_information.json not found in the zip file or folder. Did you choose the right file or folder?')
     # If zipname is a zip file
     elif zipfile.is_zipfile(zipname):
         with zipfile.ZipFile(zipname, mode='r') as z:
             for filename in z.namelist():
                 if 'personal_information/personal_information.json' in filename:
                     data = json.loads(z.read(filename))
-                    try:
-                        name = data['profile_user'][0]['string_map_data']['Name']['value']
-                        print('done')
-                        print('Participant name:', name)
-                        name_flag = True
-                        return name
-                    except Exception as e:
-                        raise Exception(f'Failed to extract name from personal_information.json: {e}')
-    
-    if not name_flag:
-        raise Exception('Participant name not found in the zip file or folder. Please make sure that the input is correct.')
+                    if data['profile_user'][0]['string_map_data']:
+                        try:
+                            name = data['profile_user'][0]['string_map_data']['Name']['value']
+                            print('done')
+                            print('Participant name:', name)
+                            return name
+                        except Exception as e:
+                            return ''
+                    else:
+                        raise Exception('personal_information.json is not valid. Did you choose the right file or folder?.')
+            else:
+                raise Exception('personal_information.json not found in the zip file or folder. Did you choose the right file or folder?')
 
 def get_post_comments(filepath: str) -> list:
     """Get comments from the zip file or folder
