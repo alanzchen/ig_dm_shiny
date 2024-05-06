@@ -3,3 +3,4 @@ wxPython
 sentence_transformers
 spacy
 spacy-fastlang
+pyinstaller
