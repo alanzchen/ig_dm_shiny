@@ -60,28 +60,28 @@ def _get_dict_from_message(message) -> dict:
 def _find_participant_name_from_zip(zipname):
     """Find participant name from the zip file or folder. Return empty string if not found"""
     print('Finding participant name ... ', end="")
-    name_flag = False
     
     # Check if zipname is a folder
     if os.path.isdir(zipname):
         folder_path = Path(zipname)
         for root, dirs, files in os.walk(folder_path, topdown=False):
             for filename in files:
+                if filename.endswith('personal_information.json'):
+                    print(root, dirs, files)
                 if 'personal_information' in root and filename.endswith('personal_information.json'):
                     json_path = os.path.join(root, filename)
                     with open(json_path, 'r') as file:
                         data = json.load(file)
                         if data['profile_user'][0]['string_map_data']:
-                            try:
-                                name = data['profile_user'][0]['string_map_data']['Name']['value']
-                                print('done')
-                                print('Participant name:', name)
+                            _ = data['profile_user'][0]['string_map_data']
+                            if 'Name' in _: # check if the format is valid
+                                name = _['Name']['value']
                                 return name
-                            except Exception as e:
-                                # it's ok to not get the name, just make sure the format is valid
-                                return ''
-                                pass
-                            # raise Exception(f'Failed to extract name from personal_information.json: {e}')
+                            elif 'Username' in _:
+                                name = _['Username']['value']
+                                return name
+                            else:
+                                raise Exception('There is a problem reading your file. Your file is likely corrupted, please contact umncarlsonstudy@gmail.com for assistance. We apology for the inconvenience.')
         else:
             raise Exception('personal_information.json not found in the zip file or folder. Did you choose the right file or folder?')
     # If zipname is a zip file
@@ -92,12 +92,17 @@ def _find_participant_name_from_zip(zipname):
                     data = json.loads(z.read(filename))
                     if data['profile_user'][0]['string_map_data']:
                         try:
-                            name = data['profile_user'][0]['string_map_data']['Name']['value']
-                            print('done')
-                            print('Participant name:', name)
-                            return name
+                            _ = data['profile_user'][0]['string_map_data']
+                            if 'Name' in _: # check if the format is valid
+                                name = _['Name']['value']
+                                return name
+                            elif 'Username' in _:
+                                name = _['Username']['value']
+                                return name
+                            else:
+                                raise Exception('There is a problem reading your file. Your file is likely corrupted, please contact umncarlsonstudy@gmail.com for assistance. We apology for the inconvenience.')
                         except Exception as e:
-                            return ''
+                            return 'participant'
                     else:
                         raise Exception('personal_information.json is not valid. Did you choose the right file or folder?.')
             else:
@@ -208,8 +213,12 @@ def get_posts(filepath: str) -> list:
                 if 'content' in root and 'posts' in filename and filename.endswith('.json'):
                     json_path = os.path.join(root, filename)
                     with open(json_path, 'r') as file:
-                        print(json_path)
-                        posts = json.load(file)['media']
+                        posts = json.load(file)
+                        if isinstance(posts, list):
+                            posts = [i['media'] for i in posts]
+                        else:
+                            # there is only one post
+                            posts = posts['media']
                         posts_list += posts
     elif zipfile.is_zipfile(filepath): # if filepath is a zip file
         with zipfile.ZipFile(filepath, mode='r') as z:
@@ -218,6 +227,11 @@ def get_posts(filepath: str) -> list:
                     print(filename)
                     decoded_text = z.read(filename)
                     posts = json.loads(decoded_text)['media']
+                    if isinstance(posts, list):
+                        posts = [i['media'] for i in posts]
+                    else:
+                        # there is only one post
+                        posts = posts['media']
                     posts_list += posts
     return posts_list
 

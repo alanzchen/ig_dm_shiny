@@ -14,6 +14,7 @@ import spacy_fastlang
 import os
 import shutil
 from multiprocessing import freeze_support
+import tempfile
 freeze_support()
 
 bundle_dir = Path(__file__).parent.absolute()
@@ -327,15 +328,16 @@ class ReformatThread(threading.Thread):
                 wx.CallAfter(self.parent.update_progress_bar, progress)
 
             output = pd.DataFrame(output)
-            output.to_csv(bundle_dir / "data.zip", index=False, compression='zip')
+            tmp_dir = Path(tempfile.mkdtemp())
+            output.to_csv(tmp_dir / "data.zip", index=False, compression='zip')
             # calculate hash of the file
             hash = hashlib.md5()
-            with open(bundle_dir / "data.zip", "rb") as f:
+            with open(tmp_dir / "data.zip", "rb") as f:
                 for chunk in iter(lambda: f.read(4096), b""):
                     hash.update(chunk)
             # rename the data.csv based on the hash
-            final_file_path = bundle_dir / f"{hash.hexdigest()}.zip"
-            Path(bundle_dir / "data.zip").rename(final_file_path)
+            final_file_path = tmp_dir / f"{hash.hexdigest()}.zip"
+            Path(tmp_dir / "data.zip").rename(final_file_path)
 
             if output is not None and not output.empty:
                 wx.CallAfter(self.parent.save_file_button.Enable)  # Enable the save button on the main thread
