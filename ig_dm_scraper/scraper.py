@@ -4,6 +4,7 @@ import datetime
 import zipfile
 import os
 import json
+import re
 
 def _get_dict_from_message(message) -> dict:
     """ This function get instagrapi's DirectMessage object and
@@ -123,7 +124,7 @@ def get_post_comments(filepath: str) -> list:
     if os.path.isdir(filepath): # if filepath is a folder
         for root, dirs, files in os.walk(filepath):
             for filename in files:
-                if 'comments' in root and 'post_comments' in filename and filename.endswith('.json'):
+                if 'comments' in root and re.search(r'^post_comments_\d+.json', os.path.basename(filename)):
                     json_path = os.path.join(root, filename)
                     with open(json_path, 'r') as file:
                         comments = json.load(file)
@@ -131,10 +132,11 @@ def get_post_comments(filepath: str) -> list:
     elif zipfile.is_zipfile(filepath): # if filepath is a zip file
         with zipfile.ZipFile(filepath, mode='r') as z:
             for filename in z.namelist():
-                if 'comments' in filename and 'post_comments' in filename and filename.endswith('.json'):
+                if 'comments' in filename and re.search(r'^post_comments_\d+.json', os.path.basename(filename)):
                     decoded_text = z.read(filename)
                     comments = json.loads(decoded_text)
                     comment_list += comments
+    print(f'{len(comment_list)} comments collected')
     return comment_list
 
 def get_reels_comments(filepath: str) -> list:
@@ -152,7 +154,7 @@ def get_reels_comments(filepath: str) -> list:
     if os.path.isdir(filepath): # if filepath is a folder
         for root, dirs, files in os.walk(filepath):
             for filename in files:
-                if 'comments' in root and 'reels_comments' in filename and filename.endswith('.json'):
+                if 'comments' in root and 'reels_comments.json' == os.path.basename(filename):
                     json_path = os.path.join(root, filename)
                     with open(json_path, 'r') as file:
                         comments = json.load(file)['comments_reels_comments']
@@ -160,10 +162,11 @@ def get_reels_comments(filepath: str) -> list:
     elif zipfile.is_zipfile(filepath): # if filepath is a zip file
         with zipfile.ZipFile(filepath, mode='r') as z:
             for filename in z.namelist():
-                if 'comments' in filename and 'reels_comments' in filename and filename.endswith('.json'):
+                if 'comments' in filename and 'reels_comments.json' == os.path.basename(filename):
                     decoded_text = z.read(filename)
                     comments = json.loads(decoded_text)['comments_reels_comments']
                     comment_list += comments
+    print(f'{len(comment_list)} comments collected')
     return comment_list
 
 def get_stories(filepath: str) -> list:
@@ -181,18 +184,26 @@ def get_stories(filepath: str) -> list:
     if os.path.isdir(filepath): # if filepath is a folder
         for root, dirs, files in os.walk(filepath):
             for filename in files:
-                if 'content' in root and 'stories' in filename and filename.endswith('.json'):
+                if 'content' in root and os.path.basename(filename) == 'stories.json':
                     json_path = os.path.join(root, filename)
                     with open(json_path, 'r') as file:
-                        stories = json.load(file)['ig_stories']
-                        stories_list += stories
+                        stories = json.load(file)
+                        if 'ig_stories' in stories:
+                            stories_list += stories['ig_stories']
+                        else:
+                            print(f'No stories found in {json_path}')
     elif zipfile.is_zipfile(filepath): # if filepath is a zip file
         with zipfile.ZipFile(filepath, mode='r') as z:
             for filename in z.namelist():
-                if 'content' in filename and 'stories' in filename and filename.endswith('.json'):
+                if 'content' in filename and os.path.basename(filename) == 'stories.json':
                     decoded_text = z.read(filename)
-                    stories = json.loads(decoded_text)['ig_stories']
-                    stories_list += stories
+                    stories = json.loads(decoded_text)
+                    if 'ig_stories' in stories:
+                        stories_list += stories['ig_stories']
+                    else:
+                        print(f'No stories found in {filename}')
+
+    print(f'{len(stories_list)} stories collected')
     return stories_list
 
 def get_posts(filepath: str) -> list:
@@ -206,33 +217,33 @@ def get_posts(filepath: str) -> list:
 
     """
     posts_list = []
+    def proc(loaded_json):
+        nonlocal posts_list
+        if isinstance(loaded_json, list):
+            posts = [i['media'][0] if 'title' not in i else i for i in loaded_json]
+        else:
+            # there is only one post
+            posts = loaded_json['media'] # note: media is a list, so no need to wrap it in a list 
+        posts_list += posts
+
     print('Getting posts from the zip file or folder ... ', end="")
     if os.path.isdir(filepath): # if filepath is a folder
         for root, dirs, files in os.walk(filepath):
             for filename in files:
-                if 'content' in root and 'posts' in filename and filename.endswith('.json'):
+                if 'content' in root and re.search(r'^posts_\d+.json', os.path.basename(filename)):
                     json_path = os.path.join(root, filename)
                     with open(json_path, 'r') as file:
                         posts = json.load(file)
-                        if isinstance(posts, list):
-                            posts = [i['media'] for i in posts]
-                        else:
-                            # there is only one post
-                            posts = posts['media']
-                        posts_list += posts
+                        proc(posts)
     elif zipfile.is_zipfile(filepath): # if filepath is a zip file
         with zipfile.ZipFile(filepath, mode='r') as z:
             for filename in z.namelist():
-                if 'content' in filename and 'posts' in filename and filename.endswith('.json'):
-                    print(filename)
+                if 'content' in filename and re.search(r'^posts_\d+.json', os.path.basename(filename)):
                     decoded_text = z.read(filename)
-                    posts = json.loads(decoded_text)['media']
-                    if isinstance(posts, list):
-                        posts = [i['media'] for i in posts]
-                    else:
-                        # there is only one post
-                        posts = posts['media']
-                    posts_list += posts
+                    posts = json.loads(decoded_text)
+                    proc(posts)
+    
+    print(f'{len(posts_list)} posts collected')
     return posts_list
 
 def get_dm_from_zip(filepath: str, oldest_date: str = None) -> list:
@@ -251,53 +262,46 @@ def get_dm_from_zip(filepath: str, oldest_date: str = None) -> list:
     oldest_date = datetime.date.fromisoformat(oldest_date if oldest_date else '2000-01-01')
     message_count = 0
     thread_list = []
+
+    def proc(loaded_json):
+        nonlocal message_count
+        nonlocal thread_list
+
+        messages = loaded_json['messages']
+        message_list = []
+        for message in messages:
+            unix_timestamp = message['timestamp_ms'] / 1000
+            if datetime.date.fromtimestamp(unix_timestamp) >= oldest_date:
+                # mark participant name if found
+                if message['sender_name'] == participant_name:
+                    message['sender_name'] = 'participant'
+                message_list.append(message)
+            else:
+                break
+        
+        if message_list: # if some messages are there
+            message_count += len(message_list)
+            thread_list.append({
+                'message': message_list
+            })
+
     print('Getting data from the zip file or folder ... ', end="")
     if os.path.isdir(filepath): # if filepath is a folder
         for root, dirs, files in os.walk(filepath):
             for filename in files:
-                if 'inbox' in root and filename.endswith('message_1.json'):
+                if 'inbox' in root and re.search(r'^message_\d+.json', os.path.basename(filename)):
                     json_path = os.path.join(root, filename)
                     with open(json_path, 'r') as file:
-                        messages = json.load(file)['messages']
-                        message_list = []
-                        for message in messages:
-                            unix_timestamp = message['timestamp_ms'] / 1000
-                            if datetime.date.fromtimestamp(unix_timestamp) >= oldest_date:
-                                # mark participant name if found
-                                if message['sender_name'] == participant_name:
-                                    message['sender_name'] = 'participant'
-                                message_list.append(message)
-                            else:
-                                break
-                        
-                        if message_list: # if some messages are there
-                            message_count += len(message_list)
-                            thread_list.append({
-                                'message': message_list
-                            })
+                        messages = json.load(file)
+                        proc(messages)
     elif zipfile.is_zipfile(filepath): # if filepath is a zip file
         with zipfile.ZipFile(filepath, mode='r') as z:
             for filename in z.namelist():
-                if 'inbox' in filename and filename.endswith('message_1.json'):
+                if 'inbox' in filename and re.search(r'^message_\d+.json', os.path.basename(filename)):
                     decoded_text = z.read(filename)
-                    messages = json.loads(decoded_text)['messages']
-                    message_list = []
-                    for message in messages:
-                        unix_timestamp = message['timestamp_ms'] / 1000
-                        if datetime.date.fromtimestamp(unix_timestamp) >= oldest_date:
-                            # mark participant name if found
-                            if message['sender_name'] == participant_name:
-                                message['sender_name'] = 'participant'
-                            message_list.append(message)
-                        else:
-                            break
-                    
-                    if message_list: # if some messages are there
-                        message_count += len(message_list)
-                        thread_list.append({
-                            'message': message_list
-                        })
-                    
+                    messages = json.loads(decoded_text)
+                    proc(messages)
+
     print('done')
     print(f'{len(thread_list)} threads - {message_count} messages collected')
 
