@@ -83,7 +83,7 @@ def _find_participant_name_from_zip(zipname):
                             else:
                                 raise Exception('There is a problem reading your file. Your file is likely corrupted, please contact umncarlsonstudy@gmail.com for assistance. We apology for the inconvenience.')
         else:
-            raise Exception('personal_information.json not found in the zip file or folder. Did you choose the right file or folder?')
+            raise Exception('personal_information.json not found in the zip file or folder. Did you choose the right file or folder? Its name should look like "instagram-(username)-XXXX".')
     # If zipname is a zip file
     elif zipfile.is_zipfile(zipname):
         with zipfile.ZipFile(zipname, mode='r') as z:
@@ -106,7 +106,7 @@ def _find_participant_name_from_zip(zipname):
                     else:
                         raise Exception('personal_information.json is not valid. Did you choose the right file or folder?.')
             else:
-                raise Exception('personal_information.json not found in the zip file or folder. Did you choose the right file or folder?')
+                raise Exception('personal_information.json not found in the zip file or folder. Did you choose the right file or folder? Its name should look like "instagram-(username)-XXXX".')
 
 def get_post_comments(filepath: str) -> list:
     """Get comments from the zip file or folder
