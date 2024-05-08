@@ -336,7 +336,7 @@ class ReformatThread(threading.Thread):
                 for chunk in iter(lambda: f.read(4096), b""):
                     hash.update(chunk)
             # rename the data.csv based on the hash
-            final_file_path = tmp_dir / f"{hash.hexdigest()}.zip"
+            final_file_path = tmp_dir / f"upload_me_{hash.hexdigest()}.zip"
             Path(tmp_dir / "data.zip").rename(final_file_path)
 
             if output is not None and not output.empty:
